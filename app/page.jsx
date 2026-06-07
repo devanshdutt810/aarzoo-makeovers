@@ -32,11 +32,6 @@ const TESTIMONIALS = [
 ];
 
 const PORTFOLIO_CATS = ["All","Bridal","Party","Hair"];
-const PORTFOLIO = [
-  ...Array.from({length:15},(_,i)=>({id:`b${i}`,cat:"Bridal",n:i+1})),
-  ...Array.from({length:36},(_,i)=>({id:`p${i}`,cat:"Party",n:i+1})),
-  ...Array.from({length:14},(_,i)=>({id:`h${i}`,cat:"Hair",n:i+1})),
-];
 
 const STATS = [
   { num:"500+", label:"Happy Brides" },
@@ -392,6 +387,40 @@ function Portfolio({ sectionRef }) {
   const [lightbox, setLightbox] = useState(null);
   const [hoveredId, setHoveredId] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [portfolio, setPortfolio] = useState([]);
+  const [dragOffset, setDragOffset] = useState(0);
+  const isDragging = useRef(false);
+
+  const touchStartX = useRef(0);
+  const touchEndX = useRef(0);
+
+  const handleTouchStart = (e) => {
+    isDragging.current = true;
+    touchStartX.current = e.touches[0].clientX;
+    touchEndX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchMove = (e) => {
+    touchEndX.current = e.touches[0].clientX;
+    setDragOffset(touchEndX.current - touchStartX.current);
+  };
+
+  const handleTouchEnd = () => {
+    isDragging.current = false;
+
+    const distance = touchStartX.current - touchEndX.current;
+    const threshold = 50;
+
+    if (distance > threshold && idx < maxIdx) {
+      setIdx((i) => Math.min(maxIdx, i + 1));
+    } else if (distance < -threshold && idx > 0) {
+      setIdx((i) => Math.max(0, i - 1));
+    }
+
+    setDragOffset(0);
+    touchStartX.current = 0;
+    touchEndX.current = 0;
+  };
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth <= 768);
@@ -400,7 +429,16 @@ function Portfolio({ sectionRef }) {
     return () => window.removeEventListener("resize", check);
   }, []);
 
-  const filtered = cat === "All" ? PORTFOLIO : PORTFOLIO.filter(p => p.cat === cat);
+  useEffect(() => {
+    fetch('/api/portfolio')
+      .then((res) => res.json())
+      .then((data) => setPortfolio(data))
+      .catch((err) => console.error('Failed to load portfolio images', err));
+  }, []);
+
+  const filtered = cat === "All"
+    ? portfolio
+    : portfolio.filter((p) => p.cat === cat);
   const visCount = isMobile ? 1 : 3;
   const maxIdx = Math.max(0, filtered.length - visCount);
 
@@ -455,11 +493,16 @@ function Portfolio({ sectionRef }) {
       </Reveal>
 
       {/* Carousel */}
-      <div style={{position:"relative",overflow:"hidden",padding:isMobile ? "0 16px" : "0 60px"}}>
+      <div
+        style={{position:"relative",overflow:"hidden",padding:isMobile ? "0 16px" : "0 60px",touchAction:"pan-y",userSelect:"none"}}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
         <div style={{
           display:"flex",
-          transform:`translateX(-${idx * (100/visCount)}%)`,
-          transition:"transform 0.6s cubic-bezier(0.22,1,0.36,1)",
+          transform:`translateX(calc(-${idx * (100 / visCount)}% + ${dragOffset}px))`,
+          transition:isDragging.current ? "none" : "transform 0.6s cubic-bezier(0.22,1,0.36,1)",
         }}>
           {filtered.map((item, i) => {
             const isHov = hoveredId === item.id;
@@ -486,8 +529,8 @@ function Portfolio({ sectionRef }) {
                     transform: isHov ? "translateY(-6px)" : "none",
                   }}>
                   <Image
-                    src={`/${item.cat.toLowerCase()}/${item.n}.jpeg`}
-                    alt={`${item.cat} ${item.n}`}
+                    src={item.src}
+                    alt={item.fileName || item.cat}
                     fill
                     sizes="(max-width: 768px) 100vw, 33vw"
                     style={{ objectFit: "cover" }}
@@ -587,8 +630,8 @@ function Portfolio({ sectionRef }) {
           }}>
             <div style={{position:"relative",width:"100%",height:"100%"}}>
               <Image
-                src={`/${lightbox.cat.toLowerCase()}/${lightbox.n}.jpeg`}
-                alt={`${lightbox.cat} ${lightbox.n}`}
+                src={lightbox.src}
+                alt={lightbox.fileName || lightbox.cat}
                 fill
                 sizes="90vw"
                 style={{objectFit:"contain"}}
