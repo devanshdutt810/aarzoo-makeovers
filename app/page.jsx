@@ -148,12 +148,26 @@ function LuxuryBackground() {
 
 // ─── CURSOR ───────────────────────────────────────────────────────────────────
 function MagneticCursor() {
+  const [enabled, setEnabled] = useState(false);
+
+  useEffect(() => {
+    const check = () => {
+      setEnabled(window.innerWidth > 1024);
+    };
+
+    check();
+    window.addEventListener('resize', check);
+
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
   const dotRef = useRef(null);
   const ringRef = useRef(null);
   const pos = useRef({x:0,y:0});
   const ring = useRef({x:0,y:0});
 
   useEffect(() => {
+    if (!enabled) return;
     const move = e => { pos.current = {x:e.clientX, y:e.clientY}; };
     window.addEventListener("mousemove", move);
     let raf;
@@ -170,7 +184,9 @@ function MagneticCursor() {
     };
     tick();
     return () => { window.removeEventListener("mousemove", move); cancelAnimationFrame(raf); };
-  }, []);
+  }, [enabled]);
+
+  if (!enabled) return null;
 
   return (
     <>
