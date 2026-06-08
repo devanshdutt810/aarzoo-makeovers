@@ -48,6 +48,14 @@ function fmtINR(n) {
 // ─── ANIMATED BACKGROUND ─────────────────────────────────────────────────────
 function LuxuryBackground() {
   const canvasRef = useRef(null);
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.matchMedia('(pointer: coarse)').matches);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -59,10 +67,10 @@ function LuxuryBackground() {
     window.addEventListener("resize", resize);
 
     // Floating orbs
-    const orbs = Array.from({ length: 12 }, (_, i) => ({
+    const orbs = Array.from({ length: isMobile ? 4 : 12 }, (_, i) => ({
       x: Math.random() * W,
       y: Math.random() * H,
-      r: 350 + Math.random() * 500,
+      r: isMobile ? (120 + Math.random() * 180) : (350 + Math.random() * 500),
       dx: (Math.random() - 0.5) * 0.2,
       dy: (Math.random() - 0.5) * 0.15,
       hue: i % 3 === 0 ? 38 : i % 3 === 1 ? 28 : 48,
@@ -71,7 +79,7 @@ function LuxuryBackground() {
     }));
 
     // Petals / sparkles
-    const petals = Array.from({length: 100}, () => ({
+    const petals = Array.from({length: isMobile ? 20 : 100}, () => ({
       x: Math.random() * W,
       y: Math.random() * H,
       size: 0.5 + Math.random() * 1.5,
@@ -136,7 +144,54 @@ function LuxuryBackground() {
     };
     draw();
     return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", resize); };
-  }, []);
+  }, [isMobile]);
+
+  if (isMobile) {
+    return (
+      <>
+        <div style={{
+          position:'fixed',
+          inset:0,
+          zIndex:0,
+          pointerEvents:'none',
+          background:'#05030c'
+        }} />
+
+        <div style={{
+          position:'fixed',
+          width:260,
+          height:260,
+          borderRadius:'50%',
+          left:'-80px',
+          top:'10%',
+          background:'rgba(212,175,55,0.08)',
+          filter:'blur(80px)',
+          zIndex:0,
+          pointerEvents:'none',
+          animation:'floatBlob1 18s ease-in-out infinite'
+        }} />
+
+        <div style={{
+          position:'fixed',
+          width:220,
+          height:220,
+          borderRadius:'50%',
+          right:'-60px',
+          top:'40%',
+          background:'rgba(232,93,131,0.06)',
+          filter:'blur(90px)',
+          zIndex:0,
+          pointerEvents:'none',
+          animation:'floatBlob2 22s ease-in-out infinite'
+        }} />
+
+        <canvas
+          ref={canvasRef}
+          style={{ position:'fixed', inset:0, zIndex:0, pointerEvents:'none' }}
+        />
+      </>
+    );
+  }
 
   return (
     <canvas
@@ -152,7 +207,7 @@ function MagneticCursor() {
 
   useEffect(() => {
     const check = () => {
-      setEnabled(window.innerWidth > 1024);
+      setEnabled(window.matchMedia('(pointer: fine)').matches);
     };
 
     check();
@@ -1355,6 +1410,16 @@ export default function AarzooMakeoversV2() {
         @keyframes scrollPulse { 0%,100%{opacity:0.3} 50%{opacity:1} }
         @keyframes shimmer { from{left:-100%} to{left:200%} }
         @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+
+        @keyframes floatBlob1 {
+          0%,100% { transform: translate(0,0); }
+          50% { transform: translate(40px,-30px); }
+        }
+
+        @keyframes floatBlob2 {
+          0%,100% { transform: translate(0,0); }
+          50% { transform: translate(-50px,40px); }
+        }
         ::selection { background: rgba(232,93,131,0.35); color: #fff; }
         @media (max-width: 768px) {
           html { cursor: auto; }
