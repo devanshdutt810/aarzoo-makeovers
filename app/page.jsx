@@ -454,44 +454,13 @@ function Hero({ onViewWork }) {
 // ─── PORTFOLIO ────────────────────────────────────────────────────────────────
 function Portfolio({ sectionRef }) {
   const [cat, setCat] = useState("All");
-  const [idx, setIdx] = useState(0);
   const [lightbox, setLightbox] = useState(null);
   const [hoveredId, setHoveredId] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
   const [portfolio, setPortfolio] = useState([]);
-  const [dragOffset, setDragOffset] = useState(0);
-  const isDragging = useRef(false);
-
-  const touchStartX = useRef(0);
-  const touchEndX = useRef(0);
-
-  const handleTouchStart = (e) => {
-    isDragging.current = true;
-    touchStartX.current = e.touches[0].clientX;
-    touchEndX.current = e.touches[0].clientX;
-  };
-
-  const handleTouchMove = (e) => {
-    touchEndX.current = e.touches[0].clientX;
-    setDragOffset(touchEndX.current - touchStartX.current);
-  };
-
-  const handleTouchEnd = () => {
-    isDragging.current = false;
-
-    const distance = touchStartX.current - touchEndX.current;
-    const threshold = 50;
-
-    if (distance > threshold && idx < maxIdx) {
-      setIdx((i) => Math.min(maxIdx, i + 1));
-    } else if (distance < -threshold && idx > 0) {
-      setIdx((i) => Math.max(0, i - 1));
-    }
-
-    setDragOffset(0);
-    touchStartX.current = 0;
-    touchEndX.current = 0;
-  };
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const limit = 24;
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth <= 768);
@@ -501,17 +470,35 @@ function Portfolio({ sectionRef }) {
   }, []);
 
   useEffect(() => {
-    fetch('/api/portfolio')
+    fetch(`/api/portfolio?page=1&limit=${limit}${cat !== 'All' ? `&category=${cat}` : ''}`)
       .then((res) => res.json())
-      .then((data) => setPortfolio(data))
+      .then((data) => {
+        setPortfolio(data.images || []);
+        setHasMore(Boolean(data.hasMore));
+        setPage(1);
+      })
       .catch((err) => console.error('Failed to load portfolio images', err));
-  }, []);
+  }, [cat]);
 
-  const filtered = cat === "All"
-    ? portfolio
-    : portfolio.filter((p) => p.cat === cat);
-  const visCount = isMobile ? 1 : 3;
-  const maxIdx = Math.max(0, filtered.length - visCount);
+  const loadMore = async () => {
+    try {
+      const nextPage = page + 1;
+
+      const res = await fetch(
+        `/api/portfolio?page=${nextPage}&limit=${limit}${cat !== 'All' ? `&category=${cat}` : ''}`
+      );
+
+      const data = await res.json();
+
+      setPortfolio((prev) => [...prev, ...(data.images || [])]);
+      setHasMore(Boolean(data.hasMore));
+      setPage(nextPage);
+    } catch (err) {
+      console.error('Failed to load more portfolio images', err);
+    }
+  };
+
+  const filtered = portfolio;
 
   const bgMap = {
     Bridal: "linear-gradient(160deg,rgba(232,93,131,0.25) 0%,rgba(180,50,100,0.15) 100%)",
@@ -544,7 +531,7 @@ function Portfolio({ sectionRef }) {
       <Reveal delay={100}>
         <div style={{display:"flex",gap:8,justifyContent:"center",marginBottom:48,flexWrap:"wrap",padding:"0 24px"}}>
           {PORTFOLIO_CATS.map(c => (
-            <button key={c} onClick={() => { setCat(c); setIdx(0); }}
+            <button key={c} onClick={() => setCat(c)}
               style={{
                 padding:"10px 26px",borderRadius:999,border:"none",cursor:"pointer",
                 fontFamily:"inherit",fontSize:13,fontWeight: cat===c ? 600 : 400,
@@ -563,117 +550,100 @@ function Portfolio({ sectionRef }) {
         </div>
       </Reveal>
 
-      {/* Carousel */}
-      <div
-        style={{position:"relative",overflow:"hidden",padding:isMobile ? "0 16px" : "0 60px",touchAction:"pan-y",userSelect:"none"}}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-      >
-        <div style={{
-          display:"flex",
-          transform:`translateX(calc(-${idx * (100 / visCount)}% + ${dragOffset}px))`,
-          transition:isDragging.current ? "none" : "transform 0.6s cubic-bezier(0.22,1,0.36,1)",
-        }}>
-          {filtered.map((item, i) => {
+      {/* Masonry Gallery */}
+      <div style={{ padding: "0 24px", maxWidth: 1400, margin: "0 auto" }}>
+        <div
+          className="masonry-gallery"
+          style={{
+            columnCount: isMobile ? 2 : 4,
+            columnGap: 20,
+          }}
+        >
+          {filtered.map((item) => {
             const isHov = hoveredId === item.id;
-            const isCtr = i === idx + Math.floor(visCount/2);
+
             return (
-              <div key={item.id} style={{
-                minWidth:`${100/visCount}%`,padding:"0 10px",
-                transform: isCtr ? "scale(1.04)" : "scale(0.97)",
-                transition:"transform 0.5s ease",
-              }}>
+              <div
+                key={item.id}
+                style={{
+                  breakInside: "avoid",
+                  marginBottom: 20,
+                  cursor: "pointer",
+                }}
+                onClick={() => setLightbox(item)}
+                onMouseEnter={() => setHoveredId(item.id)}
+                onMouseLeave={() => setHoveredId(null)}
+              >
                 <div
-                  onClick={() => setLightbox(item)}
-                  onMouseEnter={() => setHoveredId(item.id)}
-                  onMouseLeave={() => setHoveredId(null)}
                   style={{
-                    borderRadius:20,overflow:"hidden",cursor:"pointer",
-                    position:"relative",height:isMobile ? 360 : 420,
-                    background: bgMap[item.cat],
-                    border:`1px solid ${isHov ? "rgba(232,93,131,0.4)" : "rgba(255,255,255,0.07)"}`,
+                    position: "relative",
+                    overflow: "hidden",
+                    borderRadius: 20,
+                    border: `1px solid ${isHov ? "rgba(232,93,131,0.4)" : "rgba(255,255,255,0.08)"}`,
+                    transition: "all 0.3s ease",
                     boxShadow: isHov
-                      ? "0 24px 60px rgba(0,0,0,0.6),0 0 0 1px rgba(232,93,131,0.2)"
-                      : "0 8px 30px rgba(0,0,0,0.4)",
-                    transition:"all 0.3s ease",
-                    transform: isHov ? "translateY(-6px)" : "none",
-                  }}>
+                      ? "0 20px 50px rgba(0,0,0,0.45)"
+                      : "0 8px 24px rgba(0,0,0,0.3)",
+                  }}
+                >
                   <Image
                     src={item.src}
                     alt={item.fileName || item.cat}
-                    fill
-                    sizes="(max-width: 768px) 100vw, 33vw"
-                    style={{ objectFit: "cover" }}
+                    width={800}
+                    height={1200}
+                    loading="lazy"
+                    sizes="(max-width: 768px) 50vw, 25vw"
+                    style={{
+                      width: "100%",
+                      height: "auto",
+                      display: "block",
+                    }}
                   />
 
-                  {/* Bottom overlay */}
-                  <div style={{
-                    position:"absolute",inset:0,
-                    background:"linear-gradient(to top,rgba(0,0,0,0.75) 0%,transparent 50%)",
-                    opacity: isHov ? 1 : 0,transition:"opacity 0.3s ease",
-                    display:"flex",alignItems:"flex-end",padding:20,
-                    justifyContent:"space-between",
-                  }}>
-                    <span style={{fontSize:13,fontWeight:600,color:"#fff",letterSpacing:"0.05em",textTransform:"uppercase"}}>{item.cat}</span>
-                    <span style={{
-                      fontSize:11,color:"rgba(255,255,255,0.7)",padding:"5px 12px",
-                      border:"1px solid rgba(255,255,255,0.2)",borderRadius:999,
-                      background:"rgba(0,0,0,0.3)",backdropFilter:"blur(8px)",
-                    }}>⛶ View</span>
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      background:
+                        "linear-gradient(to top, rgba(0,0,0,0.75), transparent 50%)",
+                      opacity: isHov ? 1 : 0,
+                      transition: "opacity 0.3s ease",
+                      display: "flex",
+                      alignItems: "flex-end",
+                      justifyContent: "space-between",
+                      padding: 18,
+                    }}
+                  >
+                    <span style={{ color: "#fff", fontSize: 12, fontWeight: 600 }}>
+                      {item.cat}
+                    </span>
+                    <span style={{ color: "#fff", fontSize: 12 }}>
+                      View
+                    </span>
                   </div>
-
-                  {/* Top shimmer */}
-                  {isHov && <div style={{
-                    position:"absolute",top:0,left:"-100%",width:"60%",height:"100%",
-                    background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.05),transparent)",
-                    animation:"shimmer 1s ease forwards",pointerEvents:"none",
-                  }}/>}
                 </div>
               </div>
             );
           })}
         </div>
-
-        <button onClick={() => setIdx(i => Math.max(0,i-1))} disabled={idx===0}
-          style={{
-            position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",
-            width:48,height:48,borderRadius:"50%",border:"1px solid rgba(255,255,255,0.12)",
-            background:"rgba(10,5,20,0.7)",color:"#fff",fontSize:20,cursor:"pointer",
-            backdropFilter:"blur(12px)",transition:"all 0.2s",
-            opacity: idx===0 ? 0.3 : 1,
-            boxShadow:"0 4px 20px rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",
-          }}
-          onMouseEnter={e=>{if(idx!==0){e.currentTarget.style.background="rgba(232,93,131,0.3)";e.currentTarget.style.borderColor="rgba(232,93,131,0.5)";}}}
-          onMouseLeave={e=>{e.currentTarget.style.background="rgba(10,5,20,0.7)";e.currentTarget.style.borderColor="rgba(255,255,255,0.12)";}}>
-          ‹
-        </button>
-        <button onClick={() => setIdx(i => Math.min(maxIdx,i+1))} disabled={idx>=maxIdx}
-          style={{
-            position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",
-            width:48,height:48,borderRadius:"50%",border:"1px solid rgba(255,255,255,0.12)",
-            background:"rgba(10,5,20,0.7)",color:"#fff",fontSize:20,cursor:"pointer",
-            backdropFilter:"blur(12px)",transition:"all 0.2s",
-            opacity: idx>=maxIdx ? 0.3 : 1,
-            boxShadow:"0 4px 20px rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",
-          }}
-          onMouseEnter={e=>{if(idx<maxIdx){e.currentTarget.style.background="rgba(232,93,131,0.3)";e.currentTarget.style.borderColor="rgba(232,93,131,0.5)";}}}
-          onMouseLeave={e=>{e.currentTarget.style.background="rgba(10,5,20,0.7)";e.currentTarget.style.borderColor="rgba(255,255,255,0.12)";}}>
-          ›
-        </button>
       </div>
 
-      {/* Dots */}
-      <div style={{display:"flex",gap:6,justifyContent:"center",marginTop:28}}>
-        {Array.from({length:Math.min(8,filtered.length)}).map((_,i) => {
-          const step = Math.floor(i*(filtered.length/8));
-          const act = Math.abs(idx-step) < 2;
-          return <button key={i} onClick={() => setIdx(step)} style={{
-            width: act ? 24 : 8,height:8,borderRadius:4,border:"none",cursor:"pointer",
-            background: act ? "#e85d83" : "rgba(255,255,255,0.15)",
-            transition:"all 0.3s ease",padding:0,
-          }}/>;
-        })}
+      <div style={{ display:'flex', justifyContent:'center', marginTop:40 }}>
+        {hasMore && (
+          <button
+            onClick={loadMore}
+            style={{
+                  display:"inline-flex",alignItems:"center",gap:8,
+                  padding:"13px 28px",borderRadius:999,
+                  background:"linear-gradient(135deg,#e85d83,#c04070)",
+                  color:"#fff",textDecoration:"none",fontSize:14,fontWeight:600,
+                  boxShadow:"0 8px 28px rgba(232,93,131,0.4)",
+                  transition:"all 0.25s ease",letterSpacing:"0.02em",
+                }}
+          >
+            Load More
+          </button>
+        )}
       </div>
 
       {/* Lightbox */}
@@ -704,6 +674,7 @@ function Portfolio({ sectionRef }) {
                 src={lightbox.src}
                 alt={lightbox.fileName || lightbox.cat}
                 fill
+                quality={80}
                 sizes="90vw"
                 style={{objectFit:"contain"}}
               />
@@ -1160,6 +1131,7 @@ function Testimonials() {
     src={t.image}
     alt={t.name}
     fill
+    loading="lazy"
     sizes="52px"
     style={{ objectFit: "cover" }}
   />
@@ -1340,6 +1312,7 @@ function ContactCard({ href, label, sub, image, c, bc, glow }) {
           src={image}
           alt={label}
           fill
+          loading="lazy"
           sizes="40px"
           style={{ objectFit: "contain" }}
         />
@@ -1446,6 +1419,10 @@ export default function AarzooMakeoversV2() {
             padding-left: 16px !important;
             padding-right: 16px !important;
           }
+
+          .masonry-gallery {
+            column-count: 2 !important;
+          }
         }
         @media (max-width: 640px) {
           .stat-grid {
@@ -1458,6 +1435,10 @@ export default function AarzooMakeoversV2() {
 
           iframe {
             height: 280px !important;
+          }
+
+          .masonry-gallery {
+            column-count: 2 !important;
           }
         }
       `}</style>
